@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NVDA Challenge - Simulateur d'Apprentissage Clavier AZERTY</title>
+    <style>
+        :root {
+            --bg-color: #1e1e2e;
+            --card-bg: #2b2b3b;
+            --accent: #00d26a;
+            --accent-warn: #ffb703;
+            --text-main: #f8f9fa;
+            --text-sub: #a0a0b0;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .container {
+            max-width: 900px;
+            width: 100%;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 25px;
+            border-bottom: 2px solid #3b3b4f;
+            padding-bottom: 15px;
+        }
+
+        h1 { margin: 0; color: var(--accent); font-size: 1.8rem; }
+        p.subtitle { color: var(--text-sub); margin-top: 5px; }
+
+        .dashboard {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .card {
+            background: var(--card-bg);
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+        }
+
+        .challenge-box {
+            text-align: center;
+        }
+
+        .target-command {
+            font-size: 1.4rem;
+            font-weight: bold;
+            color: var(--accent-warn);
+            margin: 15px 0;
+            padding: 15px;
+            background: #181825;
+            border-radius: 8px;
+            border: 1px dashed var(--accent-warn);
+        }
+
+        .score-box {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            font-size: 1.2rem;
+        }
+
+        .score-val {
+            font-size: 2.5rem;
+            font-weight: bold;
+            color: var(--accent);
+        }
+
+        .nvda-status {
+            margin-top: 10px;
+            font-size: 0.9rem;
+            background: #181825;
+            padding: 8px;
+            border-radius: 6px;
+            width: 100%;
+            text-align: center;
+        }
+
+        .key-log {
+            background: #11111b;
+            font-family: monospace;
+            padding: 10px;
+            border-radius: 6px;
+            min-height: 50px;
+            max-height: 120px;
+            overflow-y: auto;
+            color: #89b4fa;
+            margin-top: 15px;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        button {
+            flex: 1;
+            padding: 12px;
+            border: none;
+            border-radius: 6px;
+            font-weight: bold;
+            cursor: pointer;
+            background: var(--accent);
+            color: #111;
+            transition: opacity 0.2s;
+        }
+
+        button:hover { opacity: 0.9; }
+        button.secondary { background: #45475a; color: white; }
+
+        .category-select {
+            width: 100%;
+            padding: 10px;
+            background: #181825;
+            color: white;
+            border: 1px solid #45475a;
+            border-radius: 6px;
+            margin-bottom: 15px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <header>
+        <h1>NVDA Master Challenge (Clavier AZERTY)</h1>
+        <p class="subtitle">Didacticiel interactif de sonorisation et révision d'écran NVDA</p>
+    </header>
+
+    <div class="dashboard">
+        <div class="card challenge-box">
+            <label for="catSelect"><b>Module d'entraînement :</b></label>
+            <select id="catSelect" class="category-select" onchange="changeCategory()">
+                <option value="all">Toutes les commandes (3.1 à 3.3.1)</option>
+                <option value="generales">3.2 Commandes Générales NVDA</option>
+                <option value="navigation">3.3.1 Navigation par Focus & Système</option>
+                <option value="lecture">Lecture Sans Déplacement</option>
+                <option value="tableau">Commandes pour Tableau & EasyTableNavigator</option>
+            </select>
+
+            <div id="instruction">Appuyez sur "Démarrer le Défi" pour commencer.</div>
+            <div id="targetCommand" class="target-command">---</div>
+
+            <div class="btn-group">
+                <button onclick="startChallenge()">Démarrer / Prochain</button>
+                <button class="secondary" onclick="repeatInstruction()">Répéter la consigne</button>
+            </div>
+        </div>
+
+        <div class="card score-box">
+            <div>Score actuel</div>
+            <div id="score" class="score-val">0</div>
+            <div id="nvdaState" class="nvda-status">Mode Parole : <b>ACTIVÉ</b></div>
+            <div id="helpState" class="nvda-status">Aide Saisie : <b>DÉSACTIVÉE</b></div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h3>Journal des touches détectées & Synthèse vocale NVDA</h3>
+        <div id="keyLog" class="key-log">> Attente d'action...</div>
+    </div>
+</div>
+
+<script>
+// --- BANQUE DE DONNÉES DES COMMANDES NVDA (Issues du Manuel) ---
+const commandsDB = [
+    // 3.2 Commandes Générales
+    { cat: 'generales', keyCombo: ['Control', 'Alt', 'n'], desc: "Relancer la version installée de NVDA", speak: "NVDA redémarré" },
+    { cat: 'generales', keyCombo: ['NVDA', 'q'], desc: "Arrêter NVDA", speak: "Quitter NVDA" },
+    { cat: 'generales', keyCombo: ['Control'], desc: "Arrêter la lecture en cours", speak: "" },
+    { cat: 'generales', keyCombo: ['Shift'], desc: "Mettre en pause ou relancer la lecture", speak: "Pause" },
+    { cat: 'generales', keyCombo: ['NVDA', 's'], desc: "Permuter le mode de parole (Parole, Silence, Bip)", action: 'toggleSpeech' },
+    { cat: 'generales', keyCombo: ['NVDA', 'c'], desc: "Lire le contenu du presse-papier", speak: "Contenu du presse papier : Exemple de texte copié" },
+    { cat: 'generales', keyCombo: ['NVDA', 'n'], desc: "Afficher le menu NVDA", speak: "Menu NVDA" },
+    { cat: 'generales', keyCombo: ['NVDA', '1'], desc: "Activer / Désactiver l'aide à la saisie", action: 'toggleHelp' },
+    { cat: 'generales', keyCombo: ['NVDA', 'F12'], desc: "Annoncer l'heure", speak: "Il est 14 heures 30" },
+    { cat: 'generales', keyCombo: ['NVDA', 'F2'], desc: "Indiquer à NVDA d'ignorer la prochaine commande", speak: "Ignorer la touche suivante" },
+
+    // 3.3.1 Navigation par Focus & Système
+    { cat: 'navigation', keyCombo: ['ArrowUp'], desc: "Se déplacer vers le haut", speak: "Ligne précédente" },
+    { cat: 'navigation', keyCombo: ['ArrowDown'], desc: "Se déplacer vers le bas", speak: "Ligne suivante" },
+    { cat: 'navigation', keyCombo: ['Home'], desc: "Conduire au début de la ligne", speak: "Début de ligne" },
+    { cat: 'navigation', keyCombo: ['End'], desc: "Conduire à la fin de la ligne", speak: "Fin de ligne" },
+    { cat: 'navigation', keyCombo: ['Control', 'Home'], desc: "Conduire au début du texte", speak: "Début du document" },
+    { cat: 'navigation', keyCombo: ['Control', 'End'], desc: "Conduire à la fin du texte", speak: "Fin du document" },
+    { cat: 'navigation', keyCombo: ['ArrowLeft'], desc: "Caractère précédent", speak: "Caractère précédent" },
+    { cat: 'navigation', keyCombo: ['ArrowRight'], desc: "Caractère suivant", speak: "Caractère suivant" },
+    { cat: 'navigation', keyCombo: ['Control', 'ArrowLeft'], desc: "Mot précédent", speak: "Mot précédent" },
+    { cat: 'navigation', keyCombo: ['Control', 'ArrowRight'], desc: "Mot suivant", speak: "Mot suivant" },
+    { cat: 'navigation', keyCombo: ['Control', 'ArrowUp'], desc: "Paragraphe précédent", speak: "Paragraphe précédent" },
+    { cat: 'navigation', keyCombo: ['Control', 'ArrowDown'], desc: "Paragraphe suivant", speak: "Paragraphe suivant" },
+    { cat: 'navigation', keyCombo: ['NVDA', 'ArrowDown'], desc: "Lancer la lecture à partir du curseur système", speak: "Lecture continue du document en cours..." },
+    { cat: 'navigation', keyCombo: ['Tab'], desc: "Élément suivant dans un formulaire / dialogue", speak: "Bouton Suivant focus" },
+    { cat: 'navigation', keyCombo: ['Shift', 'Tab'], desc: "Élément précédent dans un dialogue", speak: "Bouton Précédent focus" },
+    { cat: 'navigation', keyCombo: ['Alt'], desc: "Conduire à la barre des menus", speak: "Fichier sous-menu" },
+    { cat: 'navigation', keyCombo: ['Alt', 'Tab'], desc: "Basculer vers la dernière fenêtre active", speak: "Explorateur de fichiers" },
+
+    // Lecture Sans Déplacement
+    { cat: 'lecture', keyCombo: ['NVDA', 'ArrowUp'], desc: "Lire la ligne courante sur laquelle se trouve le curseur", speak: "Ligne courante : Didacticiel Windows 11 et NVDA." },
+    { cat: 'lecture', keyCombo: ['NVDA', 'Tab'], desc: "Annoncer l'objet focalisé", speak: "Bouton Valider focus" },
+    { cat: 'lecture', keyCombo: ['NVDA', 't'], desc: "Lire le titre de la fenêtre active", speak: "Document1 - Microsoft Word" },
+    { cat: 'lecture', keyCombo: ['NVDA', 'End'], desc: "Lire la barre d'état située en bas de fenêtre", speak: "Page 1 sur 12, 350 mots" },
+    { cat: 'lecture', keyCombo: ['NVDA', 'b'], desc: "Lire le contenu de la fenêtre active", speak: "Fenêtre active contenant 3 boutons et 2 champs texte" },
+    { cat: 'lecture', keyCombo: ['NVDA', 'Shift', 'ArrowUp'], desc: "Lire le texte qui a été sélectionné", speak: "Texte sélectionné : Revue d'écran NVDA" },
+
+    // Commandes Tableau & EasyTableNavigator
+    { cat: 'tableau', keyCombo: ['Control', 'Alt', 'ArrowRight'], desc: "Tableau : Conduire à la colonne suivante", speak: "Colonne 2" },
+    { cat: 'tableau', keyCombo: ['Control', 'Alt', 'ArrowLeft'], desc: "Tableau : Conduire à la colonne précédente", speak: "Colonne 1" },
+    { cat: 'tableau', keyCombo: ['Control', 'Alt', 'ArrowDown'], desc: "Tableau : Conduire à la ligne suivante", speak: "Ligne 2" },
+    { cat: 'tableau', keyCombo: ['Control', 'Alt', 'ArrowUp'], desc: "Tableau : Conduire à la ligne précédente", speak: "Ligne 1" },
+    { cat: 'tableau', keyCombo: ['²'], desc: "EasyTableNavigator : Activer/Désactiver la navigation rapide", speak: "Table Navigator ON" }
+];
+
+// --- ÉTATS DU SIMULATEUR ---
+let currentCategory = 'all';
+let currentChallenge = null;
+let score = 0;
+let speechMode = 0; // 0: Parole, 1: Silence, 2: Bip
+let helpMode = false;
+let audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+// --- MOTEUR SONORE (AUDIO API & SPEECH SYNTHESIS) ---
+function speak(text) {
+    if (speechMode === 1) return; // Silence
+    if (speechMode === 2) { // Bip
+        playBeep(440, 0.1);
+        return;
+    }
+    window.speechSynthesis.cancel();
+    let utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = 'fr-FR';
+    utterance.rate = 1.1;
+    window.speechSynthesis.speak(utterance);
+}
+
+function playBeep(freq = 600, duration = 0.08) {
+    let osc = audioCtx.createOscillator();
+    let gain = audioCtx.createGain();
+    osc.type = 'sine';
+    osc.frequency.value = freq;
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start();
+    osc.stop(audioCtx.currentTime + duration);
+}
+
+function playSuccess() {
+    playBeep(523.25, 0.08);
+    setTimeout(() => playBeep(659.25, 0.08), 80);
+    setTimeout(() => playBeep(783.99, 0.12), 160);
+}
+
+function playError() {
+    playBeep(220, 0.15);
+    setTimeout(() => playBeep(180, 0.2), 120);
+}
+
+// --- LOGIQUE DU DÉFI ---
+function changeCategory() {
+    currentCategory = document.getElementById('catSelect').value;
+    startChallenge();
+}
+
+function startChallenge() {
+    let filtered = currentCategory === 'all' 
+        ? commandsDB 
+        : commandsDB.filter(c => c.cat === currentCategory);
+    
+    currentChallenge = filtered[Math.floor(Math.random() * filtered.length)];
+    
+    document.getElementById('instruction').innerText = "Exécutez le raccourci pour :";
+    document.getElementById('targetCommand').innerText = currentChallenge.desc;
+    
+    speak("Consigne : " + currentChallenge.desc);
+}
+
+function repeatInstruction() {
+    if (currentChallenge) speak(currentChallenge.desc);
+}
+
+function logKey(str) {
+    let log = document.getElementById('keyLog');
+    log.innerHTML = `> ${str}<br>` + log.innerHTML;
+}
+
+// --- GESTIONNAIRE D'ÉVÉNEMENTS CLAVIER ---
+window.addEventListener('keydown', function (e) {
+    // Éviter défilement page par défaut pour flèches et Tab
+    if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Tab', 'Space'].includes(e.code)) {
+        e.preventDefault();
+    }
+
+    // Détection Touche NVDA (Insert ou CapsLock)
+    let isNVDA = e.key === 'Insert' || e.key === 'CapsLock' || e.code === 'Numpad0';
+    
+    let pressedCombo = [];
+    if (e.ctrlKey) pressedCombo.push('Control');
+    if (e.altKey) pressedCombo.push('Alt');
+    if (e.shiftKey) pressedCombo.push('Shift');
+    if (isNVDA) pressedCombo.push('NVDA');
+
+    let keyName = e.key;
+    if (keyName === ' ') keyName = 'Space';
+    if (!['Control', 'Alt', 'Shift', 'Insert', 'CapsLock'].includes(keyName) && !pressedCombo.includes(keyName)) {
+        pressedCombo.push(keyName);
+    }
+
+    logKey(`Touche appuyée : ${pressedCombo.join(' + ')}`);
+
+    // Gestion Aide à la Saisie
+    if (helpMode) {
+        speak(`Aide saisie : ${pressedCombo.join(' ')}`);
+        if (pressedCombo.includes('NVDA') && keyName === '1') {
+            toggleHelp();
+        }
+        return;
+    }
+
+    // Vérification de la réponse au Défi
+    if (currentChallenge) {
+        let match = validateCombo(pressedCombo, currentChallenge.keyCombo);
+        if (match) {
+            playSuccess();
+            score += 10;
+            document.getElementById('score').innerText = score;
+            
+            if (currentChallenge.action === 'toggleSpeech') toggleSpeech();
+            else if (currentChallenge.action === 'toggleHelp') toggleHelp();
+            else if (currentChallenge.speak) speak(currentChallenge.speak);
+
+            logKey(`<b>SUCCÈS ! +10 points</b>`);
+            setTimeout(startChallenge, 1500);
+        }
+    }
+});
+
+function validateCombo(pressed, target) {
+    if (pressed.length !== target.length) return false;
+    return target.every(k => pressed.map(p => p.toLowerCase()).includes(k.toLowerCase()));
+}
+
+function toggleSpeech() {
+    speechMode = (speechMode + 1) % 3;
+    let modes = ["Parole", "Silence", "Bip"];
+    document.getElementById('nvdaState').innerHTML = `Mode Parole : <b>${modes[speechMode].toUpperCase()}</b>`;
+    speak(`Mode de parole : ${modes[speechMode]}`);
+}
+
+function toggleHelp() {
+    helpMode = !helpMode;
+    document.getElementById('helpState').innerHTML = `Aide Saisie : <b>${helpMode ? 'ACTIVÉE' : 'DÉSACTIVÉE'}</b>`;
+    speak(helpMode ? "Aide à la saisie activée" : "Aide à la saisie désactivée");
+}
+</script>
+</body>
+</html>
